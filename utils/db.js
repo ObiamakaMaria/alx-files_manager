@@ -1,115 +1,72 @@
-import { MongoClient, ObjectId } from 'mongodb';
-import { env } from 'process';
+#!/usr/bin/node
+
+const { MongoClient } = require('mongodb');
+const mongo = require('mongodb');
+const { pwdHashed } = require('./utils');
 
 class DBClient {
-  constructor(host = '127.0.0.1', port = 27017, database = 'files_manager') {
-    this.host = host;
-    this.port = port;
-    this.database = database;
-    this.url = `mongodb://${this.host}:${this.port}`;
-    this.isConnected = false;
-    this.ObjectId = ObjectId;
-
-    this.client = new MongoClient(this.url);
-    this.client.connect()
-      .then(() => {
-        this.isConnected = true;
-        this.db = this.client.db(this.database);
-
-        this.client.on('close', () => {
-          this.isConnected = false;
-        });
-
-        this.client.on('reconnect', () => {
-          this.isConnected = true;
-        });
-      })
-      .catch((err) => {
-        console.log('could not connect to MongoDB: ', err);
-      });
+  constructor() {
+    const host = (process.env.DB_HOST) ? process.env.DB_HOST : 'localhost';
+    const port = (process.env.DB_PORT) ? process.env.DB_PORT : 27017;
+    this.database = (process.env.DB_DATABASE) ? process.env.DB_DATABASE : 'files_manager';
+    const dbUrl = `mongodb://${host}:${port}`;
+    this.connected = false;
+    this.client = new MongoClient(dbUrl, { useUnifiedTopology: true });
+    this.client.connect().then(() => {
+      this.connected = true;
+    }).catch((err) => console.log(err.message));
   }
 
   isAlive() {
-    return this.isConnected;
+    return this.connected;
   }
 
-  async nbUsers(query = {}) {
-    try {
-      return await this.db.collection('users').countDocuments(query);
-    } catch (error) {
-      console.log(error);
-    }
-    return undefined;
-  }
-
-  async addNewUser(user) {
-    try {
-      return await this.db.collection('users').insertOne(user);
-    } catch (error) {
-      console.log(error);
-    }
-    return undefined;
-  }
-
-  async getUser(query) {
-    try {
-      return await this.db.collection('users').findOne(query);
-    } catch (error) {
-      console.log(error);
-    }
-    return undefined;
+  async nbUsers() {
+    await this.client.connect();
+    const users = await this.client.db(this.database).collection('users').countDocuments();
+    return users;
   }
 
   async nbFiles() {
-    try {
-      return await this.db.collection('files').countDocuments();
-    } catch (error) {
-      console.log(error);
-    }
-    return undefined;
+    await this.client.connect();
+    const users = await this.client.db(this.database).collection('files').countDocuments();
+    return users;
   }
 
-  async getFile(query) {
-    try {
-      return await this.db.collection('files').findOne(query);
-    } catch (error) {
-      console.log(error);
-    }
-    return undefined;
+  async createUser(email, password) {
+    const hashedPwd = pwdHashed(password);
+    await this.client.connect();
+    const user = await this.client.db(this.database).collection('users').insertOne({ email, password: hashedPwd });
+    return user;
   }
 
-  async getFilesWithPagination(query, pageNumber, pageSize) {
-    const skip = pageNumber * pageSize;
-
-    try {
-      return await this.db.collection('files').aggregate([
-        { $match: query },
-        { $skip: skip },
-        { $limit: pageSize },
-      ]).toArray();
-    } catch (error) {
-      console.log(error);
+  async getUser(email) {
+    await this.client.connect();
+    const user = await this.client.db(this.database).collection('users').find({ email }).toArray();
+    if (!user.length) {
+      return null;
     }
-    return undefined;
+    return user[0];
   }
 
-  async addNewFile(file) {
-    try {
-      return await this.db.collection('files').insertOne(file);
-    } catch (error) {
-      console.log(error);
+  async getUserById(id) {
+    const _id = new mongo.ObjectID(id);
+    await this.client.connect();
+    const user = await this.client.db(this.database).collection('users').find({ _id }).toArray();
+    if (!user.length) {
+      return null;
     }
-    return undefined;
+    return user[0];
   }
 
-  async replaceFile(filter, replacement) {
-    try {
-      return await this.db.collection('files').replaceOne(filter, replacement);
-    } catch (error) {
-      console.log(error);
+  async userExist(email) {
+    const user = await this.getUser(email);
+    if (user) {
+      return true;
     }
-    return undefined;
+    return false;
   }
 }
 
-export default new DBClient(env.DB_HOST, env.DB_PORT, env.DB_DATABASE);
+const dbClient = new DBClient();
+module.exports = dbClient;

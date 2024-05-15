@@ -1,12 +1,14 @@
-import router from './routes/index';
+#!/usr/bin/node
 
-const express = require('express');
+const express = require("express");
+const router = require("./routes/index");
 
-const app = express();
-const port = process.env.PORT || 5000;
+const server = express();
+const PORT = process.env.PORT ? process.env.PORT : 5000;
 
-router(app);
+server.use(express.json());
+server.use(router);
 
-app.listen(port, () => {
-  console.log(`Listening at http://localhost:${port}`);
-});
+server.listen(PORT, () =>
+  console.log(`The server is running on port: ${PORT}`)
+);
