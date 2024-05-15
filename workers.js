@@ -1,62 +1,36 @@
-import Queue from 'bull';
-import imageThumbnail from 'image-thumbnail';
-import { promises as fs } from 'fs';
-import mongoClient from './utils/db';
+import DBClient from './utils/db';
 
-const fileQueue = new Queue('fileQueue', 'redis://127.0.0.1:6379');
+const Bull = require('bull');
+const { ObjectId } = require('mongodb');
+const imageThumbnail = require('image-thumbnail');
+const fs = require('fs');
 
-export function addImageToFileQueue(job) {
-  fileQueue.add(job);
-}
+const fileQueue = new Bull('fileQueue');
 
-async function thumbNail(width, path) {
-  const imgThumbnail = await imageThumbnail(path, { width });
-  return imgThumbnail;
-}
+const createImageThumbnail = async (path, options) => {
+  try {
+    const thumbnail = await imageThumbnail(path, options);
+    const pathNail = `${path}_${options.width}`;
 
-fileQueue.process(async (job, done) => {
-  const { fileId, userId } = job.data;
+    await fs.writeFileSync(pathNail, thumbnail);
+  } catch (error) {
+    console.log(error);
+  }
+};
 
-  if (!fileId) throw new Error('Missing fileId');
-  if (!userId) throw new Error('Missing userId');
+fileQueue.process(async (job) => {
+  const { fileId } = job.data;
+  if (!fileId) throw Error('Missing fileId');
 
-  const file = await mongoClient.getFile(
-    {
-      _id: mongoClient.ObjectId(fileId),
-      userId: mongoClient.ObjectId(userId),
-    },
-  );
-
-  if (!file) throw new Error('File not found');
-
-  const fileName = file.localPath;
-  const thumbnail500 = await thumbNail(500, fileName);
-  const thumbnail250 = await thumbNail(250, fileName);
-  const thumbnail100 = await thumbNail(100, fileName);
-  const image500 = `${fileName}_500`;
-  const image250 = `${fileName}_250`;
-  const image100 = `${fileName}_100`;
-
-  await fs.writeFile(image500, thumbnail500);
-  await fs.writeFile(image250, thumbnail250);
-  await fs.writeFile(image100, thumbnail100);
-  done();
-});
-
-const userQueue = new Queue('userQueue', 'redis://127.0.0.1:6379');
-
-export function addNewUserToUserQueue(job) {
-  userQueue.add(job);
-}
-
-userQueue.process(async (job, done) => {
   const { userId } = job.data;
+  if (!userId) throw Error('Missing userId');
 
-  if (!userId) throw new Error('Missing userId');
-  const newUser = mongoClient.getUser({ _id: mongoClient.ObjectId(userId) });
-  if (!newUser) throw new Error('User not found');
-  console.log('Welcome <email>!');
-  done();
+  const fileDocument = await DBClient.db
+    .collection('files')
+    .findOne({ _id: ObjectId(fileId), userId: ObjectId(userId) });
+  if (!fileDocument) throw Error('File not found');
+
+  createImageThumbnail(fileDocument.localPath, { width: 500 });
+  createImageThumbnail(fileDocument.localPath, { width: 250 });
+  createImageThumbnail(fileDocument.localPath, { width: 100 });
 });
-
-export default { addImageToFileQueue, addNewUserToUserQueue };
