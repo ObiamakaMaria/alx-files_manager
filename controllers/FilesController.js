@@ -33,7 +33,7 @@ async function postUpload(req, res) {
   if (type !== 'folder') {
     const storageDirectory = env.FOLDER_PATH || '/tmp/files_manager';
     if (!existsSync(storageDirectory)) mkdirSync(storageDirectory);
-    fileMetadata.localPath = ${storageDirectory}/${getUniqueId()};
+    fileMetadata.localPath = `${storageDirectory}/${getUniqueId()}`;
     const buffer = base64DecodeFile(data);
     writeFileSync(fileMetadata.localPath, buffer);
   }
@@ -106,7 +106,7 @@ async function putUnpublish(req, res) {
 async function getFile(req, res) {
   const { id: fileId } = req.params;
   const { size } = req.query;
- let userId;
+  let userId;
   if (req.appUser) userId = req.appUser._id;
 
   const fileDocument = await mongoClient.getFile({ _id: mongoClient.ObjectId(fileId) });
@@ -114,7 +114,7 @@ async function getFile(req, res) {
   if (fileDocument.type === 'folder') return res.status(400).json({ error: 'A folder doesn\'t have content' });
 
   let absoluteFilePath = fileDocument.localPath;
-  if (size && fileDocument.type === 'image') absoluteFilePath = ${absoluteFilePath}_${size};
+  if (size && fileDocument.type === 'image') absoluteFilePath = `${absoluteFilePath}_${size}`;
 
   if (!existsSync(absoluteFilePath)) return res.status(404).json({ error: 'Not found' });
 
